@@ -1,0 +1,136 @@
+#!/bin/bash
+
+######################################################################
+# 2017-02-16 Tim DiLauro
+#
+# Alternative BagIt package builder to be used when content is
+# too large for the Data Conservancy Packaging Tool.
+#
+# Populates Contact-Name/-Email with static values from this script.
+# Also populates Package-Name with name supplied on the command line.
+######################################################################
+
+# configurable values
+
+# bagit command
+BAGIT=bagit
+
+# Static data for bag-info.txt entries
+CONTACT_NAME="<???replace with your contact name???>""
+CONTACT_EMAIL="<???replace-with-your-contact-email???>"
+
+#######################################################################
+# DO NOT MODIFY BELOW THIS LINE
+#######################################################################
+
+PATH="/usr/bin:/bin"
+umask 0002
+
+function print_usage {
+  echo "Usage: $(basename $0) <package-path> <destination-directory> [<optional-bagit-create options>...]"
+  exit
+}
+
+function remove_temp_dir {
+  if [ -n "${temp_dir}" ] ; then
+    rm -rf "${temp_dir}"
+  fi
+}
+
+function error_cleanup {
+  rc=$?
+  >&2 echo "Error detected. Cleaning up temporary directory and exiting."
+  remove_temp_dir
+  if [ ${rc} -eq 0 ] ; then
+    exit 1
+  else
+    exit ${rc}
+  fi
+}
+
+if [ $# -lt 2 ] ; then
+  >&2 print_usage
+  exit 1
+elif [ "$1" == "--help" ] ; then
+  print_usage
+  exit 0
+elif [ "$1" == "-h" ] ; then
+  print_usage
+  exit 0
+fi
+
+source_path=$1 ; shift
+dest_dir=$1 ; shift
+bagit_opts="$@"
+
+# strip off trailing path separator, if present
+source_path="${source_path%/}"
+dest_dir="${dest_dir%/}"
+
+package_name=$(basename ${source_path})
+dest_pkg="${dest_dir}/${package_name}.tar"
+
+# check for dest/package.tar
+if [ -e "${dest_pkg}" ] ; then
+  >&2 echo "Destination package '${dest_pkg}' already exists."
+  exit 1
+fi
+
+# ensure write access to the target directory
+if [[ ! -d "${dest_dir}" || ! -w "${dest_dir}" ]] ; then
+  >&2 echo "Destination directory '${dest_dir}' must exist and be writeable to continue."
+  exit 1
+fi
+
+echo "Generating package '${package_name}' into file '${dest_pkg}' ..."
+
+trap error_cleanup ERR EXIT SIGHUP SIGINT SIGTERM
+
+# Build bag in temp directory
+temp_dir=$(mktemp -d "${TMPDIR:-/tmp/}$(basename $0).XXXXXXXXXXXX")
+
+bag_dir="${temp_dir}/${package_name}"
+payload_dir="${bag_dir}/data"
+
+echo "Creating temporary Bagit format directory at '${bag_dir}' ..."
+/bin/mkdir -p "${payload_dir}"
+echo "Copying BagIt payload to '${payload_dir}'"
+find "${source_path}" -mindepth 1 -maxdepth 1 -print0 | xargs -0 -I% cp -Rip % "${payload_dir}"
+
+# Create bag-info.txt
+cat <<EOF-Bag-Info >> "${bag_dir}/bag-info.txt"
+Contact-Name: ${CONTACT_NAME}
+Contact-Email: ${CONTACT_EMAIL}
+Package-Name: ${package_name}
+EOF-Bag-Info
+
+echo "Generating bag in place..."
+"${BAGIT}" baginplace "${bag_dir}"
+echo "Archiving bag into TAR file '${dest_pkg}' ..."
+tar -C "${temp_dir}" -cf "${dest_pkg}" "${package_name}"
+
+# verify the tarred bag
+rm -rf "${bag_dir}"
+echo "Validation: Extracting TAR'ed bag into temporary bag directory '${bag_dir}' ..."
+tar -C "${temp_dir}" -xf "${dest_pkg}"
+
+# Don't trap error for verify valid, so we can emit a reasonable message
+trap error_cleanup EXIT SIGHUP SIGINT SIGTERM
+
+echo "Validation: Verifying extracted directory..."
+"${BAGIT}" verifyvalid "${bag_dir}" >/dev/null
+validate_rc=$?
+if [ $validate_rc -eq 0 ]; then
+  echo "Validation complete. Valid bag at '${dest_pkg}'"
+else
+  >&2 echo "*** ERROR *** Validation failed. Please review '${dest_pkg}' for errors."
+fi
+
+# disable traps
+trap - INT TERM EXIT ERR
+
+# clean up the temp directory
+remove_temp_dir
+
+exit ${validate_rc}
+
