@@ -10,9 +10,24 @@ DEFAULT_SW_SERVER='https://archive.data.jhu.edu'
 command_name=$(basename $0)
 
 function print_usage {
-  echo "Usage: ${command_name} -a <api-key> -i <dataset-pid> [-d <datafile>] [-n <file-name-label] [-s <server-base-url>]"
-  echo "   or: ${command_name} -a <api-key> -i <dataset-pid> [-s <server-base-url>] [--] <datafile> [<datafile>...]"
-  echo "NB: At least one datafile must be specified. If a datafile is specified using '-d', you may not specify a list of data files at the end of the command line."
+  echo "-- HELP --------------------------------"
+  echo "Usage: ${command_name} -i <dataset-pid> [-a <api-key>] [-s <server-base-url>] [--] <datafile> [<datafile>...]"
+  echo "   or: ${command_name} -i <dataset-pid> [-a <api-key>] [-d <datafile>] [-n <file-name-label] [-s <server-base-url>]"
+  echo
+  echo "Data files must be in Zip format. In most cases, they should be double zipped."
+  echo
+  echo "Text in angle brackets ('<>') should be replaced by a value."
+  echo "Options or parameters in square brackets ('[]') are optional."
+  echo "At least one dataset pid (DOI or Handle) and one datafile must be specified." 
+  echo "If a datafile is specified using '-d <datafile>', you may NOT specify a list"
+  echo "of data files at the end of the command line."
+  echo "Option '-a <api-key>' is REQUIRED if DV_API_KEY is not set in the enenvironment."
+  echo "-- HELP --------------------------------"
+}
+
+function get_help {
+  >&2 echo "Use '${command_name} --help' for help/usage."
+  exit 1
 }
 
 function warn {
@@ -64,20 +79,26 @@ while true; do
   esac
 done
 
+if [[ -z "${APIKEY}" && -n "${DV_API_KEY}" ]] ; then
+  APIKEY="${DV_API_KEY}"
+fi
+if [[ -z "${APIKEY}" ]] ; then
+  >&2 echo "Specify an 'API KEY' or set DV_API_KEY in your environment."
+  get_help
+fi
+
+
 if [[ -z "${DATASET_ID}" || -z "${APIKEY}" ]] ; then
-  >&2 echo "The 'Dataset ID' and 'API KEY' are both required..."
-  >&2 print_usage
-  exit 1
+  >&2 echo "A 'dataset ID' is required. Use '-i <dataset-pid>'."
+ get_help
 fi
 
 if [[ -n "${DATAFILE}" && $# -gt 0 ]] ; then
-  >&2 echo "A list of data files may not be provided when a data file is specified using '-d <datafile>'"
-  >&2 print_usage
-  exit 1
+  >&2 echo "A list of data files may NOT be provided when a data file is specified using '-d <datafile>'"
+  get_help
 elif [[ -z "${DATAFILE}" && $# -eq 0 ]] ; then
-  >&2 echo "At least one data file must be specified, either using '-d' to specify a single file or by supplying a list of one or more filenames as arguments at the end of the command."
-  >&2 print_usage
-  exit 1
+  >&2 echo "At least one data file must be specified, either by using '-d' to specify a single file or by supplying a list of one or more filenames as arguments at the end of the command."
+  get_help
 fi
 
 if [[ -z "${SW_SERVER}" ]] ; then
