@@ -1,18 +1,25 @@
 #!/bin/bash
 
 #######################################################################
-# 2017-02-21 Tim DiLauro
-# Upload a file to a dataset in a dataverse instance via SWORD v2
+# 2017-03-08 Tim DiLauro
+# Upload a file to a dataset in a Dataverse instance via SWORD v2
 #######################################################################
 
+# Some defaults
+# -- default server
 DEFAULT_SW_SERVER='https://archive.data.jhu.edu'
+# -- do a real run by default
+DRY_RUN=0
+# -- APIKEY defaults to value of DV_API_KEY, if the latter is set in the environment
+APIKEY="${DV_API_KEY}" 
+
 
 command_name=$(basename $0)
 
 function print_usage {
   echo "-- HELP --------------------------------"
   echo "Usage: ${command_name} -i <dataset-pid> [-a <api-key>] [-s <server-base-url>] [--] <datafile> [<datafile>...]"
-  echo "   or: ${command_name} -i <dataset-pid> [-a <api-key>] [-d <datafile>] [-n <file-name-label] [-s <server-base-url>]"
+  echo "   or: ${command_name} -i <dataset-pid> [-a <api-key>] [-d <datafile>] [-f <file-name-label] [-s <server-base-url>]"
   echo
   echo "Data files must be in Zip format. In most cases, they should be double zipped."
   echo
@@ -36,13 +43,14 @@ function warn {
 
 # --help
 # d: data: (required) - data-binary
-# f  file (optional) - content-disposition header file name - if not specified, gets the same name as DATA, unless DATA = '-', in which case it gets named 'stdin'
+# f:  file (optional) - content-disposition header file name - if not specified, gets the same name as DATA, unless DATA = '-', in which case it gets named 'stdin'
 # i: id: pid: (required) - the PID of the dataset to which the DataFiles should be added
 # s: server: (optional) - server base url
 # a: apikey: key: - API key/token
+# n dry-run (optional) don't actually upload the files
 
 # read the options
-OPTIONS=$(getopt -o a:d:n:i:s: --long help,apikey:,key:,data:,filename:,pid:,id:,dataset:,server: -n "${command_name}" -- "$@")
+OPTIONS=$(getopt -o a:d:f:i:s:n --long help,apikey:,key:,data:,filename:,pid:,id:,dataset:,server:,dry-run -n "${command_name}" -- "$@")
 eval set -- "${OPTIONS}"
 
 # get opts and their arguments
@@ -58,7 +66,7 @@ while true; do
         "") shift 2 ;;
         *) DATAFILE=$2 ; shift 2 ;;
       esac ;;
-    -n|--filename)
+    -f|--filename)
       case "$2" in
         "") shift 2 ;;
         *) FILENAME=$2 ; shift 2 ;;
@@ -74,14 +82,12 @@ while true; do
         *) SW_SERVER=$2 ; shift 2 ;;
       esac ;;
     --help) print_usage ; exit ;;
+    -n|--dry-run) DRY_RUN=1; shift ;;
     --) shift ; break ;;
-    *) >&2 echo "Serious error! ($1)" ; exit 1 ;;
+    *) >&2 echo "Error parsing command line option ($1)" ; exit 1 ;;
   esac
 done
 
-if [[ -z "${APIKEY}" && -n "${DV_API_KEY}" ]] ; then
-  APIKEY="${DV_API_KEY}"
-fi
 if [[ -z "${APIKEY}" ]] ; then
   >&2 echo "Specify an 'API KEY' or set DV_API_KEY in your environment."
   get_help
@@ -111,10 +117,13 @@ fi
 
 # summary of files to be processed
 if [[ $# -gt 0 ]] ; then
-  echo "The following datafiles will be uploaded: $@"
-  for file in "$@"; do
-    echo -- "- ${file}"
-  done
+  #echo "The following datafiles will be uploaded:"
+  #for file in "$@"; do
+  #  echo -- "- ${file}"
+  #done
+  echo "Calculating checksums..."
+  md5sum -- "$@" | xargs -L1 echo "- md5:"
+  echo "...done."
 fi
 
 for DATAFILE in "$@"; do
@@ -123,18 +132,21 @@ for DATAFILE in "$@"; do
   else
     filename="${FILENAME}"
   fi
-  echo -n "--- SWORD upload - file: '${DATAFILE}' ..."
-  result=$(
-    curl --insecure -u ${APIKEY}: \
-       --data-binary "@${DATAFILE}" \
-       -H "Content-Disposition: filename=${filename}" \
-       -H "Content-Type: application/zip" \
-       -H "Packaging: http://purl.org/net/sword/package/SimpleZip" \
-       "${SW_SERVER}/dvn/api/data-deposit/v1.1/swordv2/edit-media/study/${DATASET_ID}"
-  )
-  echo "...done. ---"
-  echo "--- Result ---"
+  echo -n "--- SWORD upload to '${DATASET_ID}' - file: '${DATAFILE}' ..."
+  if [[ ${DRY_RUN} == 1 ]] ; then
+    result="* dry_run: no result *"
+  else
+    result=$(
+      curl --insecure -u ${APIKEY}: \
+         --data-binary "@${DATAFILE}" \
+         -H "Content-Disposition: filename=${filename}" \
+         -H "Content-Type: application/zip" \
+         -H "Packaging: http://purl.org/net/sword/package/SimpleZip" \
+         "${SW_SERVER}/dvn/api/data-deposit/v1.1/swordv2/edit-media/study/${DATASET_ID}"
+    )
+  fi
+  echo " ...done. ---"
+  echo "*** Result ***"
   echo "${result}"
+  echo "--- ...done... ---"
 done
-
-
