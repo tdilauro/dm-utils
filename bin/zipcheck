@@ -1,0 +1,27 @@
+#!/bin/bash
+
+######################################################################
+# 2017-02-20 Tim DiLauro
+#
+# Very simple check of zip files. Reports archive and
+# error counts to stdout.
+######################################################################
+
+function print_usage {
+  echo "Usage: $(basename $0) <zip-files...>..."
+  echo " e.g.: $(basename $0) file1.zip file2.zip"
+  exit
+}
+
+if [ "$1" == "--help" ] ; then
+  print_usage
+  exit 0
+elif [ "$1" == "-h" ] ; then
+  print_usage
+  exit 0
+fi
+
+for zipfile in "$@" ; do
+  echo "--- ${zipfile} ---"
+  unzip -t "${zipfile}" | grep -v "OK$" 
+done

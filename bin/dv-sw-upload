@@ -1,0 +1,119 @@
+#!/bin/bash
+
+#######################################################################
+# 2017-02-21 Tim DiLauro
+# Upload a file to a dataset in a dataverse instance via SWORD v2
+#######################################################################
+
+DEFAULT_SW_SERVER='https://archive.data.jhu.edu'
+
+command_name=$(basename $0)
+
+function print_usage {
+  echo "Usage: ${command_name} -a <api-key> -i <dataset-pid> [-d <datafile>] [-n <file-name-label] [-s <server-base-url>]"
+  echo "   or: ${command_name} -a <api-key> -i <dataset-pid> [-s <server-base-url>] [--] <datafile> [<datafile>...]"
+  echo "NB: At least one datafile must be specified. If a datafile is specified using '-d', you may not specify a list of data files at the end of the command line."
+}
+
+function warn {
+  >&2 echo "$@"
+}
+
+# --help
+# d: data: (required) - data-binary
+# f  file (optional) - content-disposition header file name - if not specified, gets the same name as DATA, unless DATA = '-', in which case it gets named 'stdin'
+# i: id: pid: (required) - the PID of the dataset to which the DataFiles should be added
+# s: server: (optional) - server base url
+# a: apikey: key: - API key/token
+
+# read the options
+OPTIONS=$(getopt -o a:d:n:i:s: --long help,apikey:,key:,data:,filename:,pid:,id:,dataset:,server: -n "${command_name}" -- "$@")
+eval set -- "${OPTIONS}"
+
+# get opts and their arguments
+while true; do
+  case "$1" in
+    -a|--apikey|--key)
+      case "$2" in
+        "") shift 2 ;;
+        *) APIKEY=$2 ; shift 2 ;;
+      esac ;;
+    -d|--data)
+      case "$2" in
+        "") shift 2 ;;
+        *) DATAFILE=$2 ; shift 2 ;;
+      esac ;;
+    -n|--filename)
+      case "$2" in
+        "") shift 2 ;;
+        *) FILENAME=$2 ; shift 2 ;;
+      esac ;;
+    -i|--id|--pid|--dataset)
+      case "$2" in
+        "") shift 2 ;;
+        *) DATASET_ID=$2 ; shift 2 ;;
+      esac ;;
+    -s|--server)
+      case "$2" in
+        "") shift 2 ;;
+        *) SW_SERVER=$2 ; shift 2 ;;
+      esac ;;
+    --help) print_usage ; exit ;;
+    --) shift ; break ;;
+    *) >&2 echo "Serious error! ($1)" ; exit 1 ;;
+  esac
+done
+
+if [[ -z "${DATASET_ID}" || -z "${APIKEY}" ]] ; then
+  >&2 echo "The 'Dataset ID' and 'API KEY' are both required..."
+  >&2 print_usage
+  exit 1
+fi
+
+if [[ -n "${DATAFILE}" && $# -gt 0 ]] ; then
+  >&2 echo "A list of data files may not be provided when a data file is specified using '-d <datafile>'"
+  >&2 print_usage
+  exit 1
+elif [[ -z "${DATAFILE}" && $# -eq 0 ]] ; then
+  >&2 echo "At least one data file must be specified, either using '-d' to specify a single file or by supplying a list of one or more filenames as arguments at the end of the command."
+  >&2 print_usage
+  exit 1
+fi
+
+if [[ -z "${SW_SERVER}" ]] ; then
+  SW_SERVER="${DEFAULT_SW_SERVER}"
+fi
+
+if [[ -n "${DATAFILE}" ]] ; then
+  eval set -- "${DATAFILE}"
+fi
+
+# summary of files to be processed
+if [[ $# -gt 0 ]] ; then
+  echo "The following datafiles will be uploaded: $@"
+  for file in "$@"; do
+    echo -- "- ${file}"
+  done
+fi
+
+for DATAFILE in "$@"; do
+  if [[ -z "${FILENAME}" ]] ; then
+    filename="${DATAFILE}"
+  else
+    filename="${FILENAME}"
+  fi
+  echo -n "--- SWORD upload - file: '${DATAFILE}' ..."
+  result=$(
+    curl --insecure -u ${APIKEY}: \
+       --data-binary "@${DATAFILE}" \
+       -H "Content-Disposition: filename=${filename}" \
+       -H "Content-Type: application/zip" \
+       -H "Packaging: http://purl.org/net/sword/package/SimpleZip" \
+       "${SW_SERVER}/dvn/api/data-deposit/v1.1/swordv2/edit-media/study/${DATASET_ID}"
+  )
+  echo "...done. ---"
+  echo "--- Result ---"
+  echo "${result}"
+done
+
+

@@ -10,24 +10,20 @@
 # Also populates Package-Name with name supplied on the command line.
 ######################################################################
 
-# configurable values
-
-# bagit command
-BAGIT=bagit
-
-# Static data for bag-info.txt entries
-CONTACT_NAME="<???replace with your contact name???>""
-CONTACT_EMAIL="<???replace-with-your-contact-email???>"
-
-#######################################################################
-# DO NOT MODIFY BELOW THIS LINE
-#######################################################################
-
 PATH="/usr/bin:/bin"
 umask 0002
 
+BAGIT=bagit
+
+# Static data for bag-info.txt entries
+CONTACT_NAME="JHU Data Management Services"
+CONTACT_EMAIL="datamanagement@jhu.edu"
+
+
 function print_usage {
-  echo "Usage: $(basename $0) <package-path> <destination-directory> [<optional-bagit-create options>...]"
+  echo "Usage: $(basename $0) <package-source-dir> <destination-directory> [<optional-bagit-create options>...]"
+  echo " e.g.: $(basename $0) Waugh_D/Waugh_00014_O_00000035_V01_Seviour_20170213 Waugh_D"
+  echo "The rightmost path element from the <package-source-dir> is used as the name of the package and is stored in the bag-info.txt"
   exit
 }
 
@@ -69,6 +65,15 @@ dest_dir="${dest_dir%/}"
 
 package_name=$(basename ${source_path})
 dest_pkg="${dest_dir}/${package_name}.tar"
+
+# verify that <package-dir> is a directory
+if [[ ! -e "${source_path}" ]] ; then
+  >&2 echo "Package source directory '${source_path}' does not exist."
+  exit 1
+elif [[ ! -d "${source_path}" ]] ; then
+  >&2 echo "Package source directory '${source_path}' is not a directory." 
+  exit 1
+fi
 
 # check for dest/package.tar
 if [ -e "${dest_pkg}" ] ; then
