@@ -115,15 +115,30 @@ if [[ -n "${DATAFILE}" ]] ; then
   eval set -- "${DATAFILE}"
 fi
 
+function zip_md5sum {
+  local all_results=''
+  for file in "$@"; do
+    if [[ "${file}" == '--' ]]; then continue; fi
+    local zipped_files=$( unzip -Z1 "${file}" | grep -v '/$' )
+    if [[ -z "${zipped_files}" ]] ; then continue; fi
+    local result=$( echo "$zipped_files" | tr '\n' '\0' | xargs -0 -L1 -I% sh -c "unzip -p -- '${file}' '%' | md5sum - | cut -d' ' -f1 | xargs -I{} echo '\"{}\"  \"%\"'" )
+    all_results="${all_results}${result}"
+    all_results+=$'\n'
+  done
+  echo "${all_results}"
+}
+
 # summary of files to be processed
 if [[ $# -gt 0 ]] ; then
   #echo "The following datafiles will be uploaded:"
   #for file in "$@"; do
   #  echo -- "- ${file}"
   #done
+  
   echo "Calculating checksums..."
-  md5sum -- "$@" | xargs -L1 echo "- md5:"
-  echo "...done."
+  #md5sum -- "$@" | xargs -L1 echo "- md5:"
+  zip_md5sum -- "$@" | xargs -L1 echo "- md5:"
+  echo "...checksums complete."
 fi
 
 for DATAFILE in "$@"; do
