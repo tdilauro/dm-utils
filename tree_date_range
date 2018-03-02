@@ -1,0 +1,50 @@
+#!/bin/bash
+
+# tree2dates
+# Tim DiLauro 2018-03-02
+# Read "tree" output with format like:
+# <tree_root_pathname>
+# ...
+# ... [ <size> <Mmm> <dd> <yyyy>] <pathname>
+# ...
+# and report its date range
+
+# first line has path of the root of the tree
+read tree_root
+
+# now read and process the rest of the lines
+sed -n -e 's/[^]]*\[\([^]]*\)\].*$/\1/p' | 
+awk '
+  BEGIN {
+    M["jan"]="01"; 
+    M["feb"]="02"; 
+    M["mar"]="03"; 
+    M["apr"]="04"; 
+    M["may"]="05"; 
+    M["jun"]="06"; 
+    M["jul"]="07"; 
+    M["aug"]="08"; 
+    M["sep"]="09";
+    M["oct"]="10";
+    M["nov"]="11";
+    M["dec"]="12"
+  }
+  { printf "%04d-%02d-%02d\n", $4, M[tolower($2)], $3; }' |
+sort | uniq |
+awk -v offset=1 '
+  { 
+    if (NR <= offset) print; 
+    else {
+      a[NR] = $0; 
+      delete a[NR-offset] 
+    } 
+  } 
+  END {
+    for (i=NR-offset+1; i<=NR; i++) print a[i] 
+  }' |
+(
+  read start_date;
+  read end_date;
+  echo "Tree '${tree_root}': $start_date - $end_date"
+)
+
