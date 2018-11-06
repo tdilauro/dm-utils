@@ -30,7 +30,7 @@ awk '
     M["dec"]="12"
   }
   { printf "%04d-%02d-%02d\n", $4, M[tolower($2)], $3; }' |
-sort | uniq |
+sort | uniq | grep -v "0000-00-00" |
 awk -v offset=1 '
   { 
     if (NR <= offset) print; 
