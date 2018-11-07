@@ -3,7 +3,7 @@
 from __future__ import print_function, unicode_literals
 
 import argparse
-import csv
+import unicodecsv as csv
 from functools import partial
 import hashlib
 import os
@@ -12,10 +12,10 @@ import subprocess
 import stat
 import sys
 
-DEFAULT_CHARSET = 'ASCII'
+DEFAULT_CHARSET = 'utf-8'
 DEFAULT_HASH = 'md5'
 DEFAULT_COMMAND = 'tree'
-DEFAULT_TREE_ARGS = ['-afFSQ', '--noreport', '--charset=UTF-8']
+DEFAULT_TREE_ARGS = ['-afFSQ', '--noreport']
 # comma-separated list of directories
 DEFAULT_DIRS = '.'
 DEFAULT_FIELDS='tree, seq, depth, filepath, hash, size'
@@ -46,31 +46,37 @@ def main():
     outfile = args.output
 
     fields = fields.replace(' ', '').split(',')
+    options.append('--charset={}'.format(charset))
 
     if outfile == '-':
-        outfile = sys.stdout
+        # stdout - sending bytes different between Py2 and Py3
+        try:
+            outfile = sys.stdout.buffer
+        except AttributeError:
+            outfile = sys.stdout
     else:
-        outfile = open(outfile, mode='x')
+        outfile = open(outfile, mode='wb')
 
     hash_class = getattr(hashlib, hash_alg)
     hasher = partial(checksum_file, hash_class=hash_class, chunk_size=64*1024)
 
 
-    with subprocess.Popen([command] + options + ['--'] + dirpaths, stdout=subprocess.PIPE) as p:
-        out = p.communicate()[0].splitlines(False)
-        # basedir = out.pop(0).decode('utf-8')
-        basedir = out[0].decode('utf-8')
-        # configure function partial based on basedir
-        depth_from_base = partial(get_depth, sep=sep_char, start=basedir.count(sep_char))
+    p = subprocess.Popen([command] + options + ['--'] + dirpaths, stdout=subprocess.PIPE)
+    out = p.communicate()[0].splitlines(False)
+    p.stdout.close()
 
-        rows = tree_lines(out, depth_func=depth_from_base, hasher=hasher)
-        emit_csv(rows, fields=fields, fileobj=outfile)
+    basedir = out[0].decode(charset)
+    # configure function partial based on basedir
+    depth_from_base = partial(get_depth, sep=sep_char, start=basedir.count(sep_char))
+
+    rows = tree_lines(out, depth_func=depth_from_base, hasher=hasher)
+    emit_csv(rows, fields=fields, fileobj=outfile, encoding=charset)
 
 
-def tree_lines(out, fields=None, depth_func=None, hasher=None):
+def tree_lines(out, fields=None, depth_func=None, hasher=None, encoding='utf-8'):
     valid_fields = ['seq', 'depth', 'row', 'tree', 'branches', 'filepath', 'filename', 'hash', 'size']
     for seq, row in enumerate(out, 1):
-        row = row.decode('UTF-8')
+        row = row.decode(encoding)
         m = row_cp.match(row)
         branches = m.groupdict()['prefix']
         filepath = m.groupdict()['filepath']
@@ -108,11 +114,11 @@ def checksum_file(fname, hash_class=None, chunk_size=4*1024):
     return checksummer.hexdigest()
 
 
-def emit_csv(rows, fields=None, fileobj=None):
+def emit_csv(rows, fields=None, fileobj=None, encoding='utf-8'):
     with fileobj as csvfile:
         if fields is None:
             return
-        writer = csv.DictWriter(csvfile, fieldnames=fields, restval='', extrasaction='ignore')
+        writer = csv.DictWriter(csvfile, encoding=encoding, fieldnames=fields, restval='', extrasaction='ignore')
         writer.writeheader()
         for row in rows:
             writer.writerow(row)
