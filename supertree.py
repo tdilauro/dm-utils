@@ -12,7 +12,7 @@ import subprocess
 import stat
 import sys
 
-DEFAULT_CHARSET = 'UTF-8'
+DEFAULT_CHARSET = 'ASCII'
 DEFAULT_HASH = 'md5'
 DEFAULT_COMMAND = 'tree'
 DEFAULT_TREE_ARGS = ['-afFSQ', '--noreport', '--charset=UTF-8']
@@ -20,7 +20,7 @@ DEFAULT_TREE_ARGS = ['-afFSQ', '--noreport', '--charset=UTF-8']
 DEFAULT_DIRS = '.'
 DEFAULT_FIELDS='tree, seq, depth, filepath, hash, size'
 
-row_pattern = b'^(?P<prefix>.*)?"(?P<filepath>.*)"(?P<suffix>[^"]*)$'
+row_pattern = r'^(?P<prefix>.*)?"(?P<filepath>.*)"(?P<suffix>[^"]*)$'
 row_cp = re.compile(row_pattern)
 
 
@@ -34,7 +34,7 @@ def main():
 
     # parameters from defaults
     charset = DEFAULT_CHARSET
-    sep_char = os.path.sep.encode(charset)
+    sep_char = os.path.sep
     fields = DEFAULT_FIELDS
     command = DEFAULT_COMMAND
     options = DEFAULT_TREE_ARGS
@@ -45,7 +45,7 @@ def main():
     dirpaths = [os.path.abspath(p) for p in dirpaths]
     outfile = args.output
 
-    fields = fields.replace(' ', '').encode(charset).split(b',')
+    fields = fields.replace(' ', '').split(',')
 
     if outfile == '-':
         outfile = sys.stdout
@@ -70,7 +70,7 @@ def main():
 def tree_lines(out, fields=None, depth_func=None, hasher=None):
     valid_fields = ['seq', 'depth', 'row', 'tree', 'branches', 'filepath', 'filename', 'hash', 'size']
     for seq, row in enumerate(out, 1):
-        # row = row.decode('UTF-8')
+        row = row.decode('UTF-8')
         m = row_cp.match(row)
         branches = m.groupdict()['prefix']
         filepath = m.groupdict()['filepath']
