@@ -17,7 +17,7 @@ import tempfile
 DEFAULT_CHARSET = 'utf-8'
 DEFAULT_HASH = 'md5'
 DEFAULT_COMMAND = 'tree'
-DEFAULT_TREE_ARGS = ['-afFSQ', '--noreport']
+DEFAULT_TREE_ARGS = ['-afFSQ', '--noreport', '--charset=ASCII']
 # comma-separated list of directories
 DEFAULT_DIRS = '.'
 DEFAULT_FIELDS='tree, seq, depth, filepath, hash, size'
@@ -35,7 +35,7 @@ def main():
     args = p.parse_args()
 
     # parameters from defaults
-    charset = DEFAULT_CHARSET
+    encoding = DEFAULT_CHARSET
     sep_char = os.path.sep
     fields = DEFAULT_FIELDS
     command = DEFAULT_COMMAND
@@ -48,7 +48,7 @@ def main():
     out_file_name = args.output
 
     fields = fields.replace(' ', '').split(',')
-    options.append('--charset={}'.format(charset))
+    # options.append('--charset={}'.format(encoding))
 
     hash_class = getattr(hashlib, hash_alg)
     hasher = partial(checksum_file, hash_class=hash_class, chunk_size=64*1024)
@@ -57,7 +57,7 @@ def main():
     out = p.communicate()[0].splitlines(False)
     p.stdout.close()
 
-    basedir = out[0].decode(charset)
+    basedir = out[0].decode(encoding)
     # configure function partial based on basedir
     depth_from_base = partial(get_depth, sep=sep_char, start=basedir.count(sep_char))
 
@@ -77,7 +77,7 @@ def main():
         dirname, basename = os.path.split(out_file_name)
         outfile= tempfile.NamedTemporaryFile(prefix='{}.'.format(basename), dir=dirname, delete=False)
 
-    emit_csv(rows, fields=fields, csvfile=outfile, encoding=charset)
+    emit_csv(rows, fields=fields, csvfile=outfile, encoding=encoding)
 
     if out_file_name != '-':
         outfile.close()
