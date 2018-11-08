@@ -48,6 +48,7 @@ def main():
     out_file_name = args.output
 
     fields = fields.replace(' ', '').split(',')
+    headings = [f if f != 'hash' else hash_alg for f in fields]
     # options.append('--charset={}'.format(encoding))
 
     hash_class = getattr(hashlib, hash_alg)
@@ -77,7 +78,7 @@ def main():
         dirname, basename = os.path.split(out_file_name)
         outfile= tempfile.NamedTemporaryFile(prefix='{}.'.format(basename), dir=dirname, delete=False)
 
-    emit_csv(rows, fields=fields, csvfile=outfile, encoding=encoding)
+    emit_csv(rows, fields=fields, headings=headings, csvfile=outfile, encoding=encoding)
 
     if out_file_name != '-':
         outfile.close()
@@ -125,11 +126,14 @@ def checksum_file(fname, hash_class=None, chunk_size=4*1024):
     return checksummer.hexdigest()
 
 
-def emit_csv(rows, fields=None, csvfile=None, encoding='utf-8'):
+def emit_csv(rows, fields=None, headings=None, csvfile=None, encoding='utf-8'):
     if fields is None:
         return
+    if headings is None:
+        headings = fields
     writer = csv.DictWriter(csvfile, encoding=encoding, fieldnames=fields, restval='', extrasaction='ignore')
-    writer.writeheader()
+    # use the underlying writer, so we can write our own headings
+    writer.writer.writerow(headings)
     for row in rows:
         writer.writerow(row)
 
