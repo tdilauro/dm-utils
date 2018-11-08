@@ -8,9 +8,11 @@ from functools import partial
 import hashlib
 import os
 import re
+import shutil
 import subprocess
 import stat
 import sys
+import tempfile
 
 DEFAULT_CHARSET = 'utf-8'
 DEFAULT_HASH = 'md5'
@@ -43,23 +45,13 @@ def main():
     hash_alg = args.algorithm
     dirpaths = args.dirpaths.replace(' ', '').split(',')
     dirpaths = [os.path.abspath(p) for p in dirpaths]
-    outfile = args.output
+    out_file_name = args.output
 
     fields = fields.replace(' ', '').split(',')
     options.append('--charset={}'.format(charset))
 
-    if outfile == '-':
-        # stdout - sending bytes different between Py2 and Py3
-        try:
-            outfile = sys.stdout.buffer
-        except AttributeError:
-            outfile = sys.stdout
-    else:
-        outfile = open(outfile, mode='wb')
-
     hash_class = getattr(hashlib, hash_alg)
     hasher = partial(checksum_file, hash_class=hash_class, chunk_size=64*1024)
-
 
     p = subprocess.Popen([command] + options + ['--'] + dirpaths, stdout=subprocess.PIPE)
     out = p.communicate()[0].splitlines(False)
@@ -69,8 +61,27 @@ def main():
     # configure function partial based on basedir
     depth_from_base = partial(get_depth, sep=sep_char, start=basedir.count(sep_char))
 
+    # generate the enhanced tree rows
     rows = tree_lines(out, depth_func=depth_from_base, hasher=hasher)
-    emit_csv(rows, fields=fields, fileobj=outfile, encoding=charset)
+
+    # stdout - sending bytes different between Py2 and Py3
+    try:
+        stdout = sys.stdout.buffer
+    except AttributeError:
+        stdout = sys.stdout
+
+    if out_file_name == '-':
+        outfile = stdout
+    else:
+        # use tempfile in same directory as target output file, so we can rename in place
+        dirname, basename = os.path.split(out_file_name)
+        outfile= tempfile.NamedTemporaryFile(prefix='{}.'.format(basename), dir=dirname, delete=False)
+
+    emit_csv(rows, fields=fields, csvfile=outfile, encoding=charset)
+
+    if out_file_name != '-':
+        outfile.close()
+        shutil.move(outfile.name, out_file_name)
 
 
 def tree_lines(out, fields=None, depth_func=None, hasher=None, encoding='utf-8'):
@@ -114,14 +125,13 @@ def checksum_file(fname, hash_class=None, chunk_size=4*1024):
     return checksummer.hexdigest()
 
 
-def emit_csv(rows, fields=None, fileobj=None, encoding='utf-8'):
-    with fileobj as csvfile:
-        if fields is None:
-            return
-        writer = csv.DictWriter(csvfile, encoding=encoding, fieldnames=fields, restval='', extrasaction='ignore')
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(row)
+def emit_csv(rows, fields=None, csvfile=None, encoding='utf-8'):
+    if fields is None:
+        return
+    writer = csv.DictWriter(csvfile, encoding=encoding, fieldnames=fields, restval='', extrasaction='ignore')
+    writer.writeheader()
+    for row in rows:
+        writer.writerow(row)
 
 
 if __name__=='__main__':
