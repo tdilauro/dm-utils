@@ -20,10 +20,35 @@ DEFAULT_COMMAND = 'tree'
 DEFAULT_TREE_ARGS = ['-afFSQ', '--noreport', '--charset=ASCII']
 # comma-separated list of directories
 DEFAULT_DIRS = '.'
-DEFAULT_FIELDS='tree, seq, depth, filepath, hash, size'
+DEFAULT_FIELDS='tree, seq, depth, indicator, filepath, hash, size'
 
-row_pattern = r'^(?P<prefix>.*)?"(?P<filepath>.*)"(?P<suffix>[^"]*)$'
+row_pattern = r'^(?P<prefix>.*)?"(?P<filepath>.*)"(?P<indicator>[^"]*)$'
 row_cp = re.compile(row_pattern)
+
+# indicators from 'tree -F' or 'ls -F'
+"""
+ls_indicators = {
+    '@': 'symlink/xattrs',
+    '*': 'executable',
+    '=': 'socket',
+    '|': 'named pipe',
+    '>': 'door',
+    '/': 'directory',
+    '': 'file',
+}
+"""
+# '*' really indicates 'executable', but 'file' is good for our purposes at the moment
+ls_indicators = {
+    '@': 'symlink/xattrs',
+    '*': 'file',
+    '=': 'socket',
+    '|': 'named pipe',
+    '>': 'door',
+    '/': 'directory',
+    '': 'file',
+}
+
+valid_fields = ['seq', 'depth', 'row', 'tree', 'branches', 'filepath', 'filename', 'indicator', 'hash', 'size']
 
 
 def main():
@@ -62,6 +87,9 @@ def main():
     # configure function partial based on basedir
     depth_from_base = partial(get_depth, sep=sep_char, start=basedir.count(sep_char))
 
+    # todo: this next line will affect refactoring the above subprocess into a generator
+    out[0] = out[0] + b'/'
+
     # generate the enhanced tree rows
     rows = tree_lines(out, depth_func=depth_from_base, hasher=hasher)
 
@@ -80,13 +108,13 @@ def main():
 
     emit_csv(rows, fields=fields, headings=headings, csvfile=outfile, encoding=encoding)
 
+    # don't close or rename stdout! only a file!
     if out_file_name != '-':
         outfile.close()
         shutil.move(outfile.name, out_file_name)
 
 
-def tree_lines(out, fields=None, depth_func=None, hasher=None, encoding='utf-8'):
-    valid_fields = ['seq', 'depth', 'row', 'tree', 'branches', 'filepath', 'filename', 'hash', 'size']
+def tree_lines(out, fields=None, valid_fields=valid_fields, depth_func=None, hasher=None, encoding='utf-8'):
     for seq, row in enumerate(out, 1):
         row = row.decode(encoding)
         m = row_cp.match(row)
@@ -94,7 +122,9 @@ def tree_lines(out, fields=None, depth_func=None, hasher=None, encoding='utf-8')
         filepath = m.groupdict()['filepath']
         filename = os.path.basename(filepath)
         depth = depth_func(filepath)
-        filetype = m.groupdict()['suffix']
+        indicator = m.groupdict()['indicator']
+        if indicator is not None:
+            indicator = ls_indicators[indicator.strip()]
         tree = branches + filename
         filestats = os.stat(filepath)
 
