@@ -48,8 +48,6 @@ ls_indicators = {
     '': 'file',
 }
 
-valid_fields = ['seq', 'depth', 'row', 'tree', 'branches', 'filepath', 'filename', 'indicator', 'hash', 'size']
-
 
 def main():
     p = argparse.ArgumentParser()
@@ -79,19 +77,14 @@ def main():
     hash_class = getattr(hashlib, hash_alg)
     hasher = partial(checksum_file, hash_class=hash_class, chunk_size=64*1024)
 
-    p = subprocess.Popen([command] + options + ['--'] + dirpaths, stdout=subprocess.PIPE)
-    out = p.communicate()[0].splitlines(False)
-    p.stdout.close()
-
-    basedir = out[0].decode(encoding)
+    rows = tree_generator(command, options=options, paths=dirpaths)
+    # first result from tree_generator() contains the base directory
+    basedir = next(rows)
     # configure function partial based on basedir
     depth_from_base = partial(get_depth, sep=sep_char, start=basedir.count(sep_char))
 
-    # todo: this next line will affect refactoring the above subprocess into a generator
-    out[0] = out[0] + b'/'
-
     # generate the enhanced tree rows
-    rows = tree_lines(out, depth_func=depth_from_base, hasher=hasher)
+    rows = tree_lines(rows, depth_func=depth_from_base, hasher=hasher)
 
     # stdout - sending bytes different between Py2 and Py3
     try:
@@ -104,7 +97,7 @@ def main():
     else:
         # use tempfile in same directory as target output file, so we can rename in place
         dirname, basename = os.path.split(out_file_name)
-        outfile= tempfile.NamedTemporaryFile(prefix='{}.'.format(basename), dir=dirname, delete=False)
+        outfile= tempfile.NamedTemporaryFile(prefix='{}.tmp-'.format(basename), dir=dirname, delete=False)
 
     emit_csv(rows, fields=fields, headings=headings, csvfile=outfile, encoding=encoding)
 
@@ -114,9 +107,38 @@ def main():
         shutil.move(outfile.name, out_file_name)
 
 
-def tree_lines(out, fields=None, valid_fields=valid_fields, depth_func=None, hasher=None, encoding='utf-8'):
-    for seq, row in enumerate(out, 1):
-        row = row.decode(encoding)
+def tree_generator(command, options=None, paths=None):
+    lines = subprocess_generator(command, options=options, paths=paths)
+    # py2/py3 compatibility, so can't use 'yield from'
+    for i, line in enumerate(lines):
+        if i == 0:
+            # the first value yielded is for calculating relative filesystem depth
+            yield line
+            # the top-level directory does not include an indicator, so we'll add one before yielding
+            line = line + '/'
+        # yield all the rows in the hierarchy
+        yield line
+
+
+def subprocess_generator(command, options=None, paths=None):
+    if options is None:
+        options = []
+    if paths is None:
+        paths = []
+    p = subprocess.Popen([command] + options + ['--'] + paths,
+                         stdout=subprocess.PIPE, bufsize=1, universal_newlines=True)
+    while True:
+        line = p.stdout.readline()
+        if line != '':
+            yield line
+        else:
+            break
+    p.stdout.close()
+
+
+valid_fields = ['seq', 'depth', 'row', 'tree', 'branches', 'filepath', 'filename', 'indicator', 'hash', 'size']
+def tree_lines(rows, fields=None, valid_fields=valid_fields, depth_func=None, hasher=None, encoding='utf-8'):
+    for seq, row in enumerate(rows, 0):
         m = row_cp.match(row)
         branches = m.groupdict()['prefix']
         filepath = m.groupdict()['filepath']
