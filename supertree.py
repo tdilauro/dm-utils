@@ -17,7 +17,7 @@ import tempfile
 DEFAULT_CHARSET = 'utf-8'
 DEFAULT_HASH = 'md5'
 DEFAULT_COMMAND = 'tree'
-DEFAULT_TREE_ARGS = ['-afFSQ', '--noreport', '--charset=ASCII']
+DEFAULT_TREE_ARGS = ['-fFQ', '--noreport', '--charset=ASCII']
 # comma-separated list of directories
 DEFAULT_DIRS = '.'
 DEFAULT_FIELDS='tree, seq, depth, indicator, filepath, hash, size'
@@ -52,6 +52,8 @@ ls_indicators = {
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--alg', dest='algorithm', default=DEFAULT_HASH, help='checksum algorithm')
+    p.add_argument('-a', '--all', dest='all_files', action='store_true', default=False,
+                   help='include hidden files and directories')
     p.add_argument('-o', '--output', dest='output', default='-', help='output filename (default: "-" (STDOUT)')
     p.add_argument('dirpaths', nargs='*', default=DEFAULT_DIRS,
                    help="comma-separated list of directories (default is current directory")
@@ -65,6 +67,8 @@ def main():
     options = DEFAULT_TREE_ARGS
 
     # params from arguments
+    if args.all_files:
+        options.append('-a')
     hash_alg = args.algorithm
     dirpaths = args.dirpaths.replace(' ', '').split(',')
     dirpaths = [os.path.abspath(p) for p in dirpaths]
