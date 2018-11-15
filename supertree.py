@@ -54,6 +54,8 @@ def main():
     p.add_argument('-a', '--all', dest='all_files', action='store_true', default=False,
                    help='include hidden files and directories')
     p.add_argument('-o', '--output', dest='output', default='-', help='output filename (default: "-" (STDOUT)')
+    p.add_argument('--no-tree-double-dash', dest='tree_double_dash', default=True, action='store_false',
+                   help="set if your 'tree' command doesn't support '--' to end option flags")
     p.add_argument('dirpaths', nargs='*', default=DEFAULT_DIRS,
                    help="list of directories (default is current directory")
     args = p.parse_args()
@@ -68,6 +70,10 @@ def main():
     # params from arguments
     if args.all_files:
         options.append('-a')
+    if args.tree_double_dash:
+        tree_end_of_options = ['--']
+    else:
+        tree_end_of_options = []
     hash_alg = args.algorithm
     dirpaths = [os.path.abspath(p) for p in args.dirpaths]
     out_file_name = args.output
@@ -82,7 +88,7 @@ def main():
     depth_by_separator = partial(get_depth, sep=sep_char)
 
     # generate the enhanced tree rows
-    rows = tree_generator(command, options=options, paths=dirpaths)
+    rows = tree_generator(command, options=options + tree_end_of_options, paths=dirpaths)
     rows = tree_line_parser(rows, depth_func=depth_by_separator, hasher=hasher)
 
     # stdout - sending bytes different between Py2 and Py3
@@ -122,7 +128,7 @@ def subprocess_generator(command, options=None, paths=None):
         options = []
     if paths is None:
         paths = []
-    p = subprocess.Popen([command] + options + ['--'] + paths,
+    p = subprocess.Popen([command] + options + paths,
                          stdout=subprocess.PIPE, bufsize=1, universal_newlines=True)
     while True:
         line = p.stdout.readline()
