@@ -1,6 +1,6 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-from __future__ import print_function, unicode_literals
+from __future__ import unicode_literals
 
 import argparse
 import unicodecsv as csv
@@ -18,9 +18,8 @@ DEFAULT_CHARSET = 'utf-8'
 DEFAULT_HASH = 'md5'
 DEFAULT_COMMAND = 'tree'
 DEFAULT_TREE_ARGS = ['-fFQ', '--noreport', '--charset=ASCII']
-# comma-separated list of directories
-DEFAULT_DIRS = '.'
-DEFAULT_FIELDS='tree, seq, depth, indicator, filepath, hash, size'
+DEFAULT_DIRS = ['.']
+DEFAULT_FIELDS='tree, seq, depth, indicator, hash, size, filepath'
 
 row_pattern = r'^(?P<prefix>[^"]*)?"(?P<filepath>.*?)"( -> "(?P<link_target>.*)")?(?P<indicator>[^"]*)$'
 row_cp = re.compile(row_pattern)
@@ -143,7 +142,6 @@ def tree_line_parser(typed_rows, fields=None, valid_fields=valid_fields, depth_f
         filepath = m.groupdict()['filepath']
         os_filepath = filepath.encode('utf-8').decode('unicode_escape')
         os_filestats = os.stat(os_filepath)
-        # todo: need to escape special characters in filename
         filename = os.path.basename(filepath)
         indicator = m.groupdict()['indicator']
         if type == 'trunk':
@@ -193,4 +191,11 @@ def emit_csv(rows, fields=None, headings=None, csvfile=None, encoding='utf-8'):
 
 
 if __name__=='__main__':
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass
+    except BrokenPipeError as e:
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, sys.stdout.fileno())
+        sys.exit(1)
