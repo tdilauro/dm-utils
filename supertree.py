@@ -80,14 +80,11 @@ def main():
     hash_class = getattr(hashlib, hash_alg)
     hasher = partial(checksum_file, hash_class=hash_class, chunk_size=64*1024)
 
-    rows = tree_generator(command, options=options, paths=dirpaths)
-    # first result from tree_generator() contains the base directory
-    basedir = next(rows)
-    # configure function partial based on basedir
-    depth_from_base = partial(get_depth, sep=sep_char, start=basedir.count(sep_char))
+    depth_by_separator = partial(get_depth, sep=sep_char)
 
     # generate the enhanced tree rows
-    rows = tree_lines(rows, depth_func=depth_from_base, hasher=hasher)
+    rows = tree_generator(command, options=options, paths=dirpaths)
+    rows = tree_line_parser(rows, depth_func=depth_by_separator, hasher=hasher)
 
     # stdout - sending bytes different between Py2 and Py3
     try:
@@ -111,16 +108,14 @@ def main():
 
 
 def tree_generator(command, options=None, paths=None):
-    lines = subprocess_generator(command, options=options, paths=paths)
-    # py2/py3 compatibility, so can't use 'yield from'
-    for i, line in enumerate(lines):
-        if i == 0:
-            # the first value yielded is for calculating relative filesystem depth
-            yield line
-            # the top-level directory does not include an indicator, so we'll add one before yielding
-            line = line + '/'
-        # yield all the rows in the hierarchy
-        yield line
+    for path in paths:
+        lines = subprocess_generator(command, options=options, paths=[path])
+        for i, line in enumerate(lines):
+            if i == 0:
+                # the top-level directory does not include an indicator, so we'll add one before yielding
+                yield 'trunk', line + '/'
+            else:
+                yield 'branch', line
 
 
 def subprocess_generator(command, options=None, paths=None):
@@ -140,14 +135,17 @@ def subprocess_generator(command, options=None, paths=None):
 
 
 valid_fields = ['seq', 'depth', 'row', 'tree', 'branches', 'filepath', 'filename', 'indicator', 'hash', 'size']
-def tree_lines(rows, fields=None, valid_fields=valid_fields, depth_func=None, hasher=None, encoding='utf-8'):
+def tree_line_parser(rows, fields=None, valid_fields=valid_fields, depth_func=None, hasher=None, encoding='utf-8'):
     for seq, row in enumerate(rows, 0):
+        type, row = row
         m = row_cp.match(row)
         branches = m.groupdict()['prefix']
         filepath = m.groupdict()['filepath']
         filename = os.path.basename(filepath)
-        depth = depth_func(filepath)
         indicator = m.groupdict()['indicator']
+        if type == 'trunk':
+            rel_depth = depth_func(filepath)
+        depth = depth_func(filepath, start=rel_depth)
         if indicator is not None:
             indicator = ls_indicators[indicator.strip()]
         tree = branches + filename
@@ -169,7 +167,7 @@ def property_dict(variables, fields):
     return dict(((k, variables[k]) for k in fields))
 
 
-def get_depth(path, sep=b'/', start='0'):
+def get_depth(path, sep=b'/', start=0):
     return path.count(sep) -  start
 
 
