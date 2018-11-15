@@ -56,7 +56,7 @@ def main():
                    help='include hidden files and directories')
     p.add_argument('-o', '--output', dest='output', default='-', help='output filename (default: "-" (STDOUT)')
     p.add_argument('dirpaths', nargs='*', default=DEFAULT_DIRS,
-                   help="comma-separated list of directories (default is current directory")
+                   help="list of directories (default is current directory")
     args = p.parse_args()
 
     # parameters from defaults
@@ -70,8 +70,7 @@ def main():
     if args.all_files:
         options.append('-a')
     hash_alg = args.algorithm
-    dirpaths = args.dirpaths.replace(' ', '').split(',')
-    dirpaths = [os.path.abspath(p) for p in dirpaths]
+    dirpaths = [os.path.abspath(p) for p in args.dirpaths]
     out_file_name = args.output
 
     fields = fields.replace(' ', '').split(',')
