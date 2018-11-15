@@ -22,7 +22,7 @@ DEFAULT_TREE_ARGS = ['-fFQ', '--noreport', '--charset=ASCII']
 DEFAULT_DIRS = '.'
 DEFAULT_FIELDS='tree, seq, depth, indicator, filepath, hash, size'
 
-row_pattern = r'^(?P<prefix>.*)?"(?P<filepath>.*)"(?P<indicator>[^"]*)$'
+row_pattern = r'^(?P<prefix>[^"]*)?"(?P<filepath>.*?)"( -> "(?P<link_target>.*)")?(?P<indicator>[^"]*)$'
 row_cp = re.compile(row_pattern)
 
 # indicators from 'tree -F' or 'ls -F'
@@ -135,12 +135,15 @@ def subprocess_generator(command, options=None, paths=None):
 
 
 valid_fields = ['seq', 'depth', 'row', 'tree', 'branches', 'filepath', 'filename', 'indicator', 'hash', 'size']
-def tree_line_parser(rows, fields=None, valid_fields=valid_fields, depth_func=None, hasher=None, encoding='utf-8'):
-    for seq, row in enumerate(rows, 0):
-        type, row = row
+def tree_line_parser(typed_rows, fields=None, valid_fields=valid_fields, depth_func=None, hasher=None, encoding='utf-8'):
+    for seq, typed_row in enumerate(typed_rows):
+        type, row = typed_row
         m = row_cp.match(row)
         branches = m.groupdict()['prefix']
         filepath = m.groupdict()['filepath']
+        os_filepath = filepath.encode('utf-8').decode('unicode_escape')
+        os_filestats = os.stat(os_filepath)
+        # todo: need to escape special characters in filename
         filename = os.path.basename(filepath)
         indicator = m.groupdict()['indicator']
         if type == 'trunk':
@@ -149,15 +152,13 @@ def tree_line_parser(rows, fields=None, valid_fields=valid_fields, depth_func=No
         if indicator is not None:
             indicator = ls_indicators[indicator.strip()]
         tree = branches + filename
-        filestats = os.stat(filepath)
+        size = os_filestats.st_size
 
-        # hashes and sizes only for regular files
-        if stat.S_ISREG(filestats.st_mode):
-            hash = hasher(filepath)
-            size = filestats.st_size
+        # hashes only for regular files
+        if stat.S_ISREG(os_filestats.st_mode):
+            hash = hasher(os_filepath)
         else:
             hash = ''
-            size = 0
 
         properties = property_dict(locals(), valid_fields)
         yield properties
